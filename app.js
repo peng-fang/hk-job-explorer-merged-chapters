@@ -590,7 +590,12 @@
       return;
     }
     const target=e.target.closest("[data-action]");
-    if(target) action(e,target);
+    if(target) {
+      action(e,target);
+    } else {
+      const band=e.target.closest('[data-chart="industry-area"] [data-tip]');
+      if(band) showTip(band,e);
+    }
   });
   main.addEventListener("keydown",e=>{
     const target=e.target.closest("svg [data-action]");

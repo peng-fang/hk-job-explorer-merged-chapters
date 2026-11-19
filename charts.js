@@ -14,10 +14,10 @@
   const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[c]);
-  const mark = (tip, kind, value, pressed) => {
+  const mark = (tip, kind, value, pressed, focusKey = kind + ":" + value) => {
     if (!kind) return `data-tip="${esc(tip)}"`;
     const selected = pressed === undefined ? "" : ` aria-pressed="${pressed}"`;
-    return `class="mark" role="button" tabindex="0" aria-label="${esc(tip)}"${selected} data-tip="${esc(tip)}" data-action="${esc(kind)}" data-value="${esc(value)}" data-focus="${esc(kind + ":" + value)}"`;
+    return `class="mark" role="button" tabindex="0" aria-label="${esc(tip)}"${selected} data-tip="${esc(tip)}" data-action="${esc(kind)}" data-value="${esc(value)}" data-focus="${esc(focusKey)}"`;
   };
   const svg = (w, h, label, content) => `<svg viewBox="0 0 ${w} ${h}" aria-label="${esc(label)}">${content}</svg>`;
   const line = (x, y, x2, y2, cls) => `<line x1="${x}" y1="${y}" x2="${x2}" y2="${y2}" class="${cls}"/>`;
@@ -83,20 +83,32 @@
       xTicks: years.filter((_,i)=>i%4===0 || i===years.length-1)});
     let base = years.map(()=>0);
     let content = a.grid;
-    for (const s of sets) {
+    let targets = "";
+    const midpoint = (a,b) => (a+b)/2;
+    for (const [seriesIndex,s] of sets.entries()) {
       const high = years.map((_,i)=>base[i]+(s.values[i] ?? 0));
       const top = years.map((y,i)=>`${a.x(y)},${a.y(high[i])}`);
       const bottom = years.map((y,i)=>`${a.x(y)},${a.y(base[i])}`).reverse();
       content += `<polygon points="${[...top,...bottom].join(" ")}" fill="${s.color}" opacity=".86"/>`;
+      // Follow both edges of the band to the midpoints between adjacent years.
+      for (const [i,y] of years.entries()) {
+        if (!Number.isFinite(s.values[i]) || s.values[i]<=0) continue;
+        const prev = Math.max(0,i-1), next = Math.min(years.length-1,i+1);
+        const left = a.x(midpoint(years[prev],y)), center = a.x(y), right = a.x(midpoint(y,years[next]));
+        const edge = values => [
+          `${left},${a.y(midpoint(values[prev],values[i]))}`,
+          `${center},${a.y(values[i])}`,
+          `${right},${a.y(midpoint(values[i],values[next]))}`,
+        ];
+        const tip = yearLabel(y) + "\n" + s.name + " " + percent(s.values[i]);
+        const points = [...edge(high),...edge(base).reverse()].join(" ");
+        const focusKey = `${action}:${y}:${seriesIndex}`;
+        targets += `<polygon points="${points}" fill="transparent" ${mark(tip,y>=2016 ? action : null,y,undefined,focusKey)}/>`;
+      }
       base = high;
     }
     content += line(a.x(year),a.top,a.x(year),a.bottom,"refline");
-    if (action) for (const [i,y] of years.entries()) {
-      const step = (a.right-a.left)/(years.length-1);
-      const tip = yearLabel(y) + "\n" + sets.map(s=>s.name + " " + percent(s.values[i])).join("\n");
-      content += `<rect x="${Math.max(a.left,a.x(y)-step/2)}" y="${a.top}" width="${i===0 || i===years.length-1 ? step/2 : step}" height="${a.bottom-a.top}" fill="transparent" ${mark(tip,y>=2016 ? action : null,y)}/>`;
-    }
-    return svg(w,h,t("各行业占全部香港就业的百分比堆叠面积图","Stacked area chart of industry shares in Hong Kong employment"),content);
+    return svg(w,h,t("各行业占全部香港就业的百分比堆叠面积图","Stacked area chart of industry shares in Hong Kong employment"),content+targets);
   }
 
   function bars(rows, opt = {}) {
